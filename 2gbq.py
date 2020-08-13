@@ -14,7 +14,6 @@ import pymysql
 import pyodbc
 from google.oauth2 import service_account
 from google.cloud import bigquery
-import smtplib
 from datetime import datetime
 import logging
 import requests
@@ -23,6 +22,8 @@ from sua_dau_so import change_phone
 
 #create GCP Client
 client = bigquery.Client.from_service_account_json('voltaic-country-280607-ea3eb5348029.json')
+
+#All C2 Google Sheets Data Source
 C2M_query = 'https://docs.google.com/spreadsheets/d/13OpfBdAgoiZRERF4SW9zQlopv-_Io3eiLHKylf_y08o/export?format=csv&id=13OpfBdAgoiZRERF4SW9zQlopv-_Io3eiLHKylf_y08o&gid=0'
 C2L_FB_Ads_query = 'https://docs.google.com/spreadsheets/d/1NMAr8S_F92KCN5gl1LJ9I11sIYAyzbzfr2b7oRK7Q_o/export?format=csv&id=1NMAr8S_F92KCN5gl1LJ9I11sIYAyzbzfr2b7oRK7Q_o&gid=734520631'
 C2L_FB_3rd1_query = 'https://docs.google.com/spreadsheets/d/1NMAr8S_F92KCN5gl1LJ9I11sIYAyzbzfr2b7oRK7Q_o/export?format=csv&id=1NMAr8S_F92KCN5gl1LJ9I11sIYAyzbzfr2b7oRK7Q_o&gid=0'
@@ -31,6 +32,61 @@ C2L_Shopify_Form_query = 'https://docs.google.com/spreadsheets/d/1DYkPloEJLyAcvL
 
 logs = []
 
+def load_gbq(df, table_id, schema):
+    '''
+    Load Pandas DataFrame to Bigquery
+    Dataset & Table must be created beforehand
+    Temporary disable paritioning
+    Defaults to WRITE_TRUNCATE
+    Planning to switch to APPEND
+    '''
+    job_config = bigquery.LoadJobConfig(
+        schema=schema,
+        write_disposition = 'WRITE_TRUNCATE',
+        parquet_compression='snappy',
+        source_format= 'PARQUET')
+    #    time_partitioning = bigquery.TimePartitioning(
+    #        type_ = bigquery.TimePartitioningType.DAY,
+    #        field = partition_field))
+    print(f'Loading to `{table_id}`...')
+    job = client.load_table_from_dataframe(
+        df, table_id, job_config=job_config)
+    print('Sleep for 5 sec...')
+    time.sleep(5)
+    table = client.get_table(table_id)  # Make an API request.
+    print(job.result())
+    result = "Loaded {} rows and {} columns to {}".format(table.num_rows, len(table.schema), table_id)
+    print(result)
+    logs.append(result)
+
+def get_netsuite(query):
+    '''
+    Query NetSuite using ODBC
+    Planning to switch to JDBC or REST API
+    '''
+    cnxn = pyodbc.connect('DSN=NetSuiteML;uid=minh.le@vuanem.com;PWD=BI@2023cute')
+    sales_order = pd.read_sql(query, cnxn)
+    print(sales_order.head())
+    return sales_order
+
+sql_specs = {
+    'username': 'root',
+    'pwd': 'VuaNem@2020',
+    'server': '1.55.215.47',
+    'db_name': 'vuanem_ecommerce'
+}
+
+def get_mysql(query):
+    '''
+    Query Vuanem MySQL DB using pymysql
+    '''
+    sqlEngine = create_engine(r'mysql+pymysql://{0}:{1}@{2}/{3}'.format(sql_specs['username'], sql_specs['pwd'], sql_specs['server'], sql_specs['db_name']))
+    dbConnection = sqlEngine.connect()
+    df = pd.read_sql(query, dbConnection)
+    print(df.head())
+    return df
+
+#NetSuite Sales Order
 netsuite_query = '''
     SELECT
         CAST(TRANSACTIONS.TRANDATE AS date) AS TRANDATE,
@@ -60,13 +116,6 @@ netsuite_query = '''
         TRANSACTIONS.CUSTOMER_PHONE
         '''
 
-#get NetSuite from query
-def get_netsuite(query):
-    cnxn = pyodbc.connect('DSN=NetSuiteML;uid=minh.le@vuanem.com;PWD=BI@2023cute')
-    sales_order = pd.read_sql(query, cnxn)
-    print(sales_order.head())
-    return sales_order
-
 sales_order = get_netsuite(netsuite_query)
 
 netsuite_schema = [
@@ -77,32 +126,13 @@ netsuite_schema = [
     bigquery.SchemaField('ITEM_COUNT', "FLOAT"),
     bigquery.SchemaField("NET_AMOUNT", "FLOAT")]
 
-def load_gbq(df, table_id, schema):
-    job_config = bigquery.LoadJobConfig(
-        schema=schema,
-        write_disposition = 'WRITE_TRUNCATE',
-        parquet_compression='snappy',
-        source_format= 'PARQUET')
-    #    time_partitioning = bigquery.TimePartitioning(
-    #        type_ = bigquery.TimePartitioningType.DAY,
-    #        field = partition_field))
-    print(f'Loading to `{table_id}`...')
-    job = client.load_table_from_dataframe(
-        df, table_id, job_config=job_config)
-    print('Sleep for 5 sec...')
-    time.sleep(5)
-    table = client.get_table(table_id)  # Make an API request.
-    print(job.result())
-    result = "Loaded {} rows and {} columns to {}".format(table.num_rows, len(table.schema), table_id)
-    print(result)
-    logs.append(result)
-
 load_gbq(df=sales_order,
          table_id='NetSuite.SalesOrder',
          schema=netsuite_schema)
 
 del sales_order
 
+#Caresoft Tickets
 caresoft_tickets_query = '''
 SELECT
     cst.care_soft_ticket_id,
@@ -123,21 +153,6 @@ SELECT
 FROM
     vuanem_ecommerce.care_soft_tickets cst
 '''
-
-sql_specs = {
-    'username': 'root',
-    'pwd': 'VuaNem@2020',
-    'server': '1.55.215.47',
-    'db_name': 'vuanem_ecommerce'
-}
-
-def get_mysql(query):
-    sqlEngine = create_engine(r'mysql+pymysql://{0}:{1}@{2}/{3}'.format(sql_specs['username'], sql_specs['pwd'], sql_specs['server'], sql_specs['db_name']))
-    dbConnection = sqlEngine.connect()
-    df = pd.read_sql(query, dbConnection)
-    print(df.head())
-    return df
-
 caresoft_tickets = get_mysql(caresoft_tickets_query)
 
 caresoft_tickets_schema = [
@@ -164,6 +179,10 @@ load_gbq(
 )
 
 def get_care_receive_status():
+    '''
+    Get Care & Receive Status through Caresoft API
+    Planning to switch to temp table
+    '''
     headers = {
         'authorization': 'Bearer VBxdGeTLbdcPs1M',
         'content-type': 'application/json'
@@ -185,6 +204,7 @@ def transform_tickets_custom_fields(df):
     }, axis=1, inplace=True)
     return df
 
+#Caresoft Tickets Custom Fields
 caresoft_tickets_custom_fields_query = '''
 SELECT
 	ticket_id,
@@ -214,6 +234,7 @@ load_gbq(
 
 del caresoft_tickets, caresoft_tickets_custom_fields
 
+#Caresoft Call Logs
 caresoft_call_logs_query = '''
 SELECT
     call_id,
@@ -255,7 +276,6 @@ load_gbq(
 )
 
 # FUNNEL
-
 vuanem_salescall_salescall_query = '''
 SELECT
     customer_name AS name,
@@ -285,8 +305,10 @@ WHERE hotline = '18002092'
 ORDER BY call_date
 '''
 
+#C2C
 C2C = get_mysql(vuanem_call)
 
+#C2M
 C2M = pd.read_csv(
     C2M_query,
     usecols=['Tên', 'Phone(raw)', 'Date(raw)'],
@@ -300,9 +322,12 @@ C2M.rename(mapper={
 C2M['dt'] = pd.to_datetime(C2M['date'], format='%d/%m/%Y')
 C2M['date'] = pd.to_datetime(C2M['date'], format='%d/%m/%Y').dt.date
 
+#C2L
+#C2L Salescalls
 C2L_vuanem_salescalls = get_mysql(vuanem_salescall_salescall_query)
 C2L_vuanem_salescalls['shopify_order_id'] = C2L_vuanem_salescalls['shopify_order_id'].astype(str)
 
+#C2L_FB_Ads
 C2L_FB_Ads = pd.read_csv(C2L_FB_Ads_query, usecols=['Date', 'Name', 'Phone', 'Email'], parse_dates=['Date'])
 C2L_FB_Ads['source'] = 'LP Digital - FB Ads'
 C2L_FB_Ads.columns = C2L_FB_Ads.columns.str.lower()
@@ -311,6 +336,7 @@ C2L_FB_Ads.rename(mapper={
 },axis=1,inplace=True)
 C2L_FB_Ads['date'] = C2L_FB_Ads['dt'].dt.date
 
+#C2L_FB_3rd1
 C2L_FB_3rd1 = pd.read_csv(C2L_FB_3rd1_query, usecols=['Date', 'Name', 'Phone', 'Email', 'Gclid'], parse_dates=['Date'])
 C2L_FB_3rd1.columns = C2L_FB_3rd1.columns.str.lower()
 C2L_FB_3rd1['source'] = 'LP Digital - FB Ads 3rd1'
@@ -319,6 +345,7 @@ C2L_FB_3rd1.rename(mapper={
 },axis=1,inplace=True)
 C2L_FB_3rd1['date'] = C2L_FB_3rd1['dt'].dt.date
 
+#C2L_FB_3rd2
 C2L_FB_3rd2 = pd.read_csv(C2L_FB_3rd2_query, usecols=['Date', 'Name', 'Phone', 'Email', 'Gclid'], parse_dates=['Date'])
 C2L_FB_3rd2.columns = C2L_FB_3rd2.columns.str.lower()
 C2L_FB_3rd2['source'] = 'LP Digital - FB Ads'
@@ -327,6 +354,7 @@ C2L_FB_3rd2.rename(mapper={
 },axis=1,inplace=True)
 C2L_FB_3rd2['date'] = C2L_FB_3rd2['dt'].dt.date
 
+#C2L_Shopify_Form
 C2L_Shopify_Form = pd.read_csv(C2L_Shopify_Form_query, usecols=['First Subscribed On', 'Phone Number', 'Email', 'gclid', 'initial_utm_medium', 'initial_utm_source'], parse_dates=['First Subscribed On'],date_parser=lambda col: pd.to_datetime(col, utc=True))
 C2L_Shopify_Form.rename(mapper={
     'First Subscribed On': 'dt',
@@ -337,9 +365,11 @@ C2L_Shopify_Form['source'] = 'LP Digital - Shopify Form'
 C2L_Shopify_Form['dt']= C2L_Shopify_Form['dt'].dt.tz_localize(None)
 C2L_Shopify_Form['date'] = C2L_Shopify_Form['dt'].dt.date
 
+#All C2L Source
 C2L = pd.concat([C2L_FB_Ads, C2L_FB_3rd1, C2L_FB_3rd2, C2L_Shopify_Form, C2L_vuanem_salescalls])
 C2L['channel'] = 'Leads'
 
+#Concat all C2Leads
 C2Leads = pd.concat([C2C, C2M, C2L])
 C2Leads['phone'] = C2Leads['phone'].apply(change_phone)
 

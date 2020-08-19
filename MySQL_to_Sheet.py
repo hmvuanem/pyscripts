@@ -78,7 +78,7 @@ def Create_Service(client_secret_file, api_service_name, api_version, *scopes):
     except Exception as e:
         print(e)
 
-Create_Service(r'F:/credentials.json', 'sheets', 'v4',['https://www.googleapis.com/auth/spreadsheets'])
+Create_Service(r'credentials.json', 'sheets', 'v4',['https://www.googleapis.com/auth/spreadsheets'])
 
 def Export_Data_To_Sheets(table, range_name):
     response_date = service.spreadsheets().values().update(

@@ -74,9 +74,9 @@ for col in date_cols:
 
 """# BigQuery API"""
 
-client = bigquery.Client.from_service_account_json(r'quick-cacao-276609-51516664df41.json')
+client = bigquery.Client.from_service_account_json(r'voltaic-country-280607-ea3eb5348029.json')
 
-table_id = 'bi.inventory_valuation_snapshot'
+table_id = 'NetSuite.InventoryValuation'
 job_config = bigquery.LoadJobConfig(
     schema=[
       bigquery.SchemaField("create_date", "DATE"),

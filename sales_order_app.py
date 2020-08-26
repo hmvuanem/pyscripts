@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import jaydebeapi
-import pyodbc
+#import pyodbc
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import streamlit as st
@@ -17,12 +17,12 @@ def get_connection_jdbc():
         {'user': "minh.le@vuanem.com", 'password': "BI@2023cute"},
         'NQjc.jar')
     return conn
-
+'''
 @st.cache
 def get_connection_odbc():
     conn = pyodbc.connect('DSN=NetSuiteML;uid=minh.le@vuanem.com;PWD=BI@2023cute')
     return conn
-
+'''
 def get_data(conn):
     day = (datetime.today() - timedelta(days=7)).strftime('%Y-%m-%d')
     netsuite_query = f'''
@@ -82,7 +82,7 @@ def get_plot(df):
     )
     return fig
 
-conn = get_connection_odbc()
+conn = get_connection_jdbc()
 df = get_data(conn)
 plot = get_plot(df)
 

@@ -1,7 +1,7 @@
 FROM python:3.7
-WORKDIR /app
+EXPOSE 8080
+WORKDIR /
 COPY requirements.txt ./requirements.txt
 RUN pip3 install -r requirements.txt
-EXPOSE 8080
-COPY . /app
-CMD streamlit run --server.port 8080 --server.enableCORS false sales_order_app.py
+COPY . .
+CMD streamlit run sales_order_app.py --server.port 8080

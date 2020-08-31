@@ -5,6 +5,9 @@ import jaydebeapi
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import streamlit as st
+from tensorflow.keras.models import load_model
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.externals.joblib import load
 
 @st.cache
 def get_connection_jdbc():
@@ -17,14 +20,16 @@ def get_connection_jdbc():
         {'user': "minh.le@vuanem.com", 'password': "BI@2023cute"},
         'NQjc.jar')
     return conn
-'''
+
+def get_model():
+    return load_model('model')
+
 @st.cache
-def get_connection_odbc():
-    conn = pyodbc.connect('DSN=NetSuiteML;uid=minh.le@vuanem.com;PWD=BI@2023cute')
-    return conn
-'''
+def get_sc():
+    return load('model/mm_scaler.bin')
+
 def get_data(conn):
-    day = (datetime.today() - timedelta(days=7)).strftime('%Y-%m-%d')
+    day = (datetime.today() - timedelta(days=30)).strftime('%Y-%m-%d')
     netsuite_query = f'''
     SELECT
         CAST(TRANSACTIONS.TRANDATE AS date) AS "TRANDATE",
@@ -52,27 +57,25 @@ def get_data(conn):
     df = pd.read_sql(netsuite_query, con=conn)
     return df
 
-def get_plot(df):
+def process(df):
+    today_30 = df[['Sales Order']].iloc[-31:-1,:].values
+    today_30 = today_30.reshape(-1,1)
+    sc = get_sc()
+    today_30 = sc.transform(today_30)
+    today_30 = np.reshape(today_30, (1, today_30.shape[0], today_30.shape[1]))
+    model = get_model()
+    today_pred = model.predict(today_30)
+    today_pred = sc.inverse_transform(today_pred)
+    return today_pred
+
+def get_plot(df, today_pred):
     fig = go.Figure()
 
     fig.add_trace(
         go.Scatter(
-            name='Today',
-            x=df['TRANDATE'][-2:],
-            y=df['Sales Order'][-2:],
-            mode='markers+lines',
-            marker={
-                'size':20,
-                'color':'red'
-            }
-        )
-    )
-
-    fig.add_trace(
-        go.Scatter(
             name='Sales Order',
-            x=df['TRANDATE'][:-1],
-            y=df['Sales Order'][:-1],
+            x=df['TRANDATE'].iloc[-7:-1],
+            y=df['Sales Order'].iloc[-7:-1],
             mode='markers+lines',
             marker={
                 'size':10,
@@ -80,11 +83,77 @@ def get_plot(df):
             }
         )
     )
+
+    fig.add_trace(
+        go.Scatter(
+            name='Sales Order',
+            x=df['TRANDATE'].iloc[-2:],
+            y=df['Sales Order'].iloc[-2:],
+            mode='markers+lines',
+            marker={
+                'size':10,
+                'color':'blue'
+            },
+            line={
+                'color':'blue',
+                'dash':'dash'
+            },
+            showlegend=False,
+            hoverinfo='skip'
+        )
+    )
+    
+    fig.add_trace(
+        go.Scatter(
+            name='Prediction',
+            x=df['TRANDATE'][-1:],
+            y=today_pred[0],
+            mode='markers+lines',
+            marker={
+                'size':20,
+                'color':'green'
+            }
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            name='Actual',
+            x=df['TRANDATE'][-1:],
+            y=df['Sales Order'][-1:],
+            mode='markers+lines',
+            marker={
+                'size':20,
+                'color':'red'
+            }
+        )
+    )
+    
+    fig.update_layout(
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+            ),
+        autosize=True,
+        height=400,
+        width=700,
+        margin=dict(
+            l=0,
+            r=0,
+            t=0,
+            b=0,
+            pad=0
+            )
+        )
     return fig
 
 conn = get_connection_jdbc()
 df = get_data(conn)
-plot = get_plot(df)
+today_pred = process(df)
+plot = get_plot(df,today_pred)
 
 st.title('Sales Order')
 

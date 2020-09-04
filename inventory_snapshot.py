@@ -8,7 +8,6 @@ import os
 import logging
 
 from google.oauth2 import service_account
-import pandas_gbq
 from google.cloud import bigquery
 
 """# Query"""

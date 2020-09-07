@@ -12,7 +12,7 @@ from google.cloud import bigquery
 
 """# Query"""
 
-cnxn = pyodbc.connect('DSN=NetSuiteML;uid=minh.le@vuanem.com;PWD=BI@2023cute')
+cnxn = pyodbc.connect('DSN=NetSuiteML;uid=minh.le@vuanem.com;PWD=BI2024BI2024')
 
 yesterday = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
 yesterday

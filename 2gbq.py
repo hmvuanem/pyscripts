@@ -55,7 +55,7 @@ def get_netsuite(query):
     Query NetSuite using ODBC
     Planning to switch to JDBC or REST API
     '''
-    cnxn = pyodbc.connect('DSN=NetSuiteML;uid=minh.le@vuanem.com;PWD=BI@2023cute')
+    cnxn = pyodbc.connect('DSN=NetSuiteML;uid=minh.le@vuanem.com;PWD=BI2024BI2024')
     sales_order = pd.read_sql(query, cnxn)
     print(sales_order.head())
     return sales_order

@@ -293,6 +293,7 @@ SELECT
 FROM
     vuanem_ecommerce.vuanem_call
 WHERE hotline = '18002092'
+AND LEFT(status,1) = 'C'
 ORDER BY call_date
 '''
 

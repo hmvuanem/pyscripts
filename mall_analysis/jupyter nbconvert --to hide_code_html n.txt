@@ -1,1 +1,1 @@
- jupyter nbconvert --to hide_code_html notebook_to_convert.ipynb
+jupyter nbconvert --to html --template hidecode YourNotebook.ipynb
